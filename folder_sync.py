@@ -1,11 +1,13 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
+import sys
+
+if sys.version_info[0] < 3:
+    sys.stderr.write("You need Python 3 or later to run this script!\n")
+    sys.exit(1)
 
 import os
+import dirsync
 import tkinter as tk
 from tkinter import messagebox, filedialog
-import dirsync
-import subprocess
 
 # GUI приложение
 class Application(tk.Frame):
@@ -14,7 +16,7 @@ class Application(tk.Frame):
         self.directory_source = None
         self.directory_destination = None
         self.dialog_window = None
-        self.password = tk.StringVar()
+        self.password = None
         self.source = "1"
         self.destination = "2"
         self.label_first = tk.Label(text="missing folder", fg="red")
@@ -23,25 +25,50 @@ class Application(tk.Frame):
         self.label_second.grid(row=1, column=2, sticky="nsew")
         self.list_box = tk.Listbox(selectmode=tk.EXTENDED, height=2)
         self.list_box.grid(row=2, columnspan=3, sticky="nsew")
-        self.button_source_local = tk.Button(text="Source local",   activeforeground="blue", bg="#4e9a06",
+        self.button_source_local = tk.Button(text="Source local", activeforeground="blue", bg="#4e9a06",
                                              command=lambda: self.open_folder(self.source))
         self.button_source_local.grid(row=0, column=0, sticky="nsew")
-        self.button_source_network = tk.Button(text="Source network",  activeforeground="blue", bg="#4e9a06",
+        self.button_source_network = tk.Button(text="Source network", activeforeground="blue", bg="#4e9a06",
                                                command=lambda: self.network_configuration(self.source))
         self.button_source_network.grid(row=0, column=1, sticky="nsew")
-        self.button_source_destination = tk.Button(text="Destination",  activeforeground="blue", bg="#ffff00",
+        self.button_source_destination = tk.Button(text="Destination", activeforeground="blue", bg="#ffff00",
                                                    command=lambda: self.open_folder(self.destination))
         self.button_source_destination.grid(row=1, column=0, sticky="nsew")
-        self.button_synchronization = tk.Button(text="Synchronization",  activeforeground="blue", bg="#ffb841",
-                                                command=lambda: self.synchronization())
-        self.button_synchronization.grid(row=3, column=0, sticky="nsew")
+        self.button_sync = tk.Button(text="sync", activeforeground="blue", bg="#ffb841", command=lambda: self.sync())
+        self.button_sync.grid(row=3, column=0, sticky="nsew")
         self.button_delete = tk.Button(text="Delete", activeforeground="blue", bg="#ff496c",
-                                       command=lambda: self.file_folder())
+                                       command=lambda: self.delete_folder())
         self.button_delete.grid(row=3, column=1, sticky="nsew")
         self.button_exit = tk.Button(text="Exit", activeforeground="blue", bg="#42aaff",
-                                     command=lambda: self.question_exit())
+                                     command=lambda: self.exit())
         self.button_exit.grid(row=3, column=2, sticky="nsew")
         self.update_clock()
+        self.master.bind('<Delete>', self.delete_folder)
+        self.master.bind('<Escape>', self.exit)
+
+    def dialog_window_setup(self):
+        self.dialog_window = tk.Toplevel(self.master)
+        # Сделать только второе окно активным
+        self.dialog_window.grab_set()
+        # Расположение по оси y
+        x = self.dialog_window.winfo_screenwidth() // 2 - 150
+        # Расположение по оси x
+        y = self.dialog_window.winfo_screenheight() // 2 - 150
+        self.dialog_window.title("Enter password for sudo")
+        # Размеры GUI приложения
+        self.dialog_window.geometry("260x50+{}+{}".format(x, y))
+        # Масштабирование
+        self.dialog_window.grid_columnconfigure(0, weight=1)
+        self.dialog_window.grid_rowconfigure(0, weight=1)
+        self.dialog_window.grid_rowconfigure(1, weight=1)
+        self.password = tk.StringVar()
+        entry_password = tk.Entry(self.dialog_window, textvariable=self.password, show='*')
+        entry_password.grid(row=0, columnspan=3, sticky="nsew")
+        button_password = tk.Button(self.dialog_window, text="Password entry", activeforeground="blue", bg="#4e9a06",
+                                    command=self.close_dialog_window)
+        button_password.grid(row=1, columnspan=3, sticky="nsew")
+        self.dialog_window.bind('<Return>', self.close_dialog_window)
+        self.dialog_window.mainloop()
 
     # Загрузка папки
     def open_folder(self, directory_selection):
@@ -66,35 +93,35 @@ class Application(tk.Frame):
                 self.directory_destination = directory
             print(directory + " LOADED")
 
-    def get_password(self):
-        print("Password entered:" + self.password.get())
-        self.dialog_window.quit()
+    # Закрыть второе окно
+    def close_dialog_window(self, event=None):
         self.dialog_window.destroy()
+        self.dialog_window.quit()
 
+    # Настройка сетевой папки
     def network_configuration(self, directory_selection):
-        self.dialog_window = tk.Toplevel(self.master)
-        # Расположение по оси y
-        x = self.dialog_window.winfo_screenwidth() // 2 - 150
-        # Расположение по оси x
-        y = self.dialog_window.winfo_screenheight() // 2 - 150
-        self.dialog_window.title("Enter password for sudo")
-        # Размеры GUI приложения
-        self.dialog_window.geometry("300x50+{}+{}".format(x, y))
-        entry_password = tk.Entry(self.dialog_window, textvariable=self.password, show='*').pack()
-        button_password = tk.Button(self.dialog_window, text="Password entry", command=self.get_password).pack()
-        self.dialog_window.mainloop()
+        self.dialog_window_setup()
+        # Ввод команды с паролем в терминал
         command = "sudo mount -a"
-        p = os.system('echo %s | sudo -S %s' % (self.password.get(), command))
-        # os.system("sudo -mount -a " + ' '.join(self.password))
-        self.open_folder(directory_selection)
+        no_access = os.system('echo %s | sudo -S %s' % (self.password.get(), command))
+        # Проверка на пароль
+        if no_access:
+            self.network_configuration(directory_selection)
+        else:
+            self.open_folder(directory_selection)
 
-    # Синхронизация папок
-    def synchronization(self, ):
+    def sync(self, event=None):
+        """
+        Синхронизация папок.
+        Все файлы из папки источника будут скопированы в папку назначение.
+        Совпадающие элементы будут пропущены.
+        Лишние элементы в папке назначения будут удалены.
+        """
         dirsync.sync(self.directory_source, self.directory_destination, 'sync', purge=True)
-        self.button_synchronization["text"] = "Success",
+        self.button_sync["text"] = "Success",
 
     # Удаление папки(ок) при нажатии или выделении через shift
-    def file_folder(self):
+    def delete_folder(self, event=None):
         select = list(self.list_box.curselection())
         select.reverse()
         for i in select:
@@ -107,16 +134,16 @@ class Application(tk.Frame):
             print(directory + " DELETED")
 
     # Выход из программы
-    def question_exit(self):
-        ask = messagebox.askquestion("Exit", "Are you sure to quit?")
+    def exit(self, event=None):
+        ask = messagebox.askquestion(title="Exit", message="Are you sure to quit?")
         if ask == "yes":
-            self.master.quit()
             self.master.destroy()
+            self.master.quit()
 
     def update_clock(self):
         """
         Таймер, который проверяет через каждые (несколько) миллисекунд на наличие двух загруженных папок.
-        Если обе папки не загружены, то кнопка button_synchronization недоступна.
+        Если обе папки не загружены, то кнопка button_sync недоступна.
         """
         if self.directory_source:
             self.label_first.config(text=os.path.basename(self.directory_source) + "\nLOADED", fg="blue")
@@ -129,9 +156,11 @@ class Application(tk.Frame):
             self.label_second.config(text="missing folder", fg="red")
 
         if self.list_box.size() == 2:
-            self.button_synchronization.config(state=tk.ACTIVE, bg="#ffb841")
+            self.button_sync.config(state=tk.ACTIVE, bg="#ffb841")
+            self.master.bind('<s>', self.sync)
         else:
-            self.button_synchronization.config(state=tk.DISABLED, bg="white")
+            self.button_sync.config(state=tk.DISABLED, bg="white")
+            self.master.unbind('<s>')
         self.after(100, self.update_clock)
 
 def main():
