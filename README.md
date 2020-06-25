@@ -11,6 +11,12 @@ GUI приложение для быстрой синхронизации пап
   * dirsync
   * tkinter
 
+### Загрузка
+```
+git clone https://gitlab.com/agaltsev.stas/folder-sync.git
+cd folder-sync
+```
+
 ### Запуск
 ```
 python3 folder_sync.py
